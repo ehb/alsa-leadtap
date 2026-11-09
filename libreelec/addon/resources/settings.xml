@@ -5,7 +5,7 @@
       <group id="1" label="30001">
         <setting id="slave" type="string" label="30010" help="30011">
           <level>0</level>
-          <default>iec958:CARD=SPDIFout,DEV=0</default>
+          <default>hdmi_bmc</default>
           <control type="edit" format="string">
             <heading>30010</heading>
           </control>

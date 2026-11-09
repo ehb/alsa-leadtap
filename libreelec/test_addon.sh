@@ -83,7 +83,7 @@ sys.exit(0 if need <= have else 1)" "$HERE/addon/resources/settings.xml" "$HERE/
 $S start > "$T/out" 2>&1; rc=$?
 [ $rc = 0 ] && ok "start with no settings file" || { bad "start with no settings file (rc $rc)"; cat "$T/out"; }
 check "conf.d file written" test -f "$CONF"
-check "default slave" has 'slave.pcm "iec958:CARD=SPDIFout,DEV=0"' "$CONF"
+check "default slave" has 'slave.pcm "hdmi_bmc"' "$CONF"
 check "default lead 180" has '^  lead 180$' "$CONF"
 check "default: both pipes" has "fifo \[ \"$FD/leadtap.fifo\" \"$FD/leadtap-sync.fifo\" \]" "$CONF"
 check "name begins with hdmi" has '^pcm.hdmi_leadtap {' "$CONF"
@@ -129,7 +129,7 @@ settings '    <setting id="slave">a"b;reboot</setting>
     <setting id="target">999.1.1.1</setting>
     <setting id="gain">0</setting>'
 $S start > "$T/out" 2>&1
-check "bad slave -> default" has 'slave.pcm "iec958:CARD=SPDIFout,DEV=0"' "$CONF"
+check "bad slave -> default" has 'slave.pcm "hdmi_bmc"' "$CONF"
 check "bad lead -> default" has '^  lead 180$' "$CONF"
 check "bad wled -> default (on)" has "leadtap-sync.fifo" "$CONF"
 check "bad target -> default" grep -qx TARGET=239.0.0.1 "$RUN/service.alsa-leadtap.env"
@@ -154,10 +154,10 @@ settings '    <setting id="slave" />
     <setting id="lead"></setting>
     <setting id="slave2">x</setting>'
 $S start > "$T/out" 2>&1
-check "empty entries -> defaults" sh -c "grep -q 'slave.pcm \"iec958:CARD=SPDIFout,DEV=0\"' '$CONF' && grep -q '^  lead 180\$' '$CONF'"
+check "empty entries -> defaults" sh -c "grep -q 'slave.pcm \"hdmi_bmc\"' '$CONF' && grep -q '^  lead 180\$' '$CONF'"
 settings '    <setting id="slave">a&amp;b</setting>'
 $S start > "$T/out" 2>&1
-check "XML entity decoded then rejected" has 'slave.pcm "iec958:CARD=SPDIFout,DEV=0"' "$CONF"
+check "XML entity decoded then rejected" has 'slave.pcm "hdmi_bmc"' "$CONF"
 printf 'garbage, not xml' > "$D/settings.xml"
 check "garbage settings file -> defaults, start succeeds" $S start
 

@@ -30,7 +30,7 @@ msgid "Sound card (ALSA device)"
 msgstr ""
 
 msgctxt "#30011"
-msgid "ALSA name of the device that plays the sound, for example iec958:CARD=SPDIFout,DEV=0 (optical S/PDIF of rpi-gpio-spdif) or hdmi:CARD=vc4hdmi0,DEV=0 (HDMI). List the names with: aplay -L. Letters, digits and _ : = , . + - only. After a change the device is rewritten at once; a device that is playing keeps the old setting until it is opened again."
+msgid "ALSA name of the device that plays the sound, for example hdmi_bmc (optical S/PDIF, provided by the add-on service.rpi-gpio-spdif; the default) or hdmi:CARD=vc4hdmi0,DEV=0 (HDMI). With HDMI or another sound card the default does not exist: change this setting. List the names with: aplay -L. Letters, digits and _ : = , . + - only. After a change the device is rewritten at once; a device that is playing keeps the old setting until it is opened again."
 msgstr ""
 
 msgctxt "#30012"

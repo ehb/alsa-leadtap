@@ -155,11 +155,16 @@ Settings (add-on settings in Kodi):
 
 | Setting | Default | Meaning |
 |---|---|---|
-| Sound card (ALSA device) | `iec958:CARD=SPDIFout,DEV=0` | name of the slave PCM that plays the sound, see `aplay -L`; for HDMI for example `hdmi:CARD=vc4hdmi0,DEV=0` |
+| Sound card (ALSA device) | `hdmi_bmc` | name of the slave PCM that plays the sound, see `aplay -L`. The default is the optical S/PDIF output provided by the add-on service.rpi-gpio-spdif; **with HDMI or another sound card this setting must be changed**, for HDMI for example `hdmi:CARD=vc4hdmi0,DEV=0` |
 | Lead of the copy (ms) | 180 | 0..2000; wled-audiosync uses the same value |
 | Send audio sync to WLED | on | run wled-audiosync |
 | Target address | 239.0.0.1 | WLED's multicast group or the IPv4 address of one controller |
 | Gain | 1.0 | gain of wled-audiosync |
+
+The default slave `hdmi_bmc` comes from service.rpi-gpio-spdif; its setting `extra_ms` (default 80)
+keeps enough audio queued behind the plugin for a lead of 180 ms. Without it the copy would be
+dropped now and then, see the
+[rpi-gpio-spdif README](https://github.com/ehb/rpi-gpio-spdif#setting-extra_ms).
 
 Invalid values fall back to the default (the journal says so). Changing a setting restarts
 the unit, which rewrites the configuration; a device that is playing keeps the old setting
@@ -198,14 +203,15 @@ restart Kodi once to get the new plugin code.
 `libreelec/test_addon.sh` tests the start script with a fake add-on root against native
 builds (settings mapping, generated configuration through alsa-lib, supervision of
 wled-audiosync, cleanup, the build script's architecture check); it needs Linux with
-`aplay`.
+`aplay` and is run by hand, not in CI.
 
 ## Status
 
 Early. Besides the selftest against a simulated slave (see above) it has run on one
 machine, a Raspberry Pi 4B with LibreELEC 12.2.1 (alsa-lib 1.2.11) and Kodi 21:
 
-- In front of an S/PDIF sound card whose driver has its own DMA ring beyond the ALSA buffer:
+- In front of an S/PDIF sound card whose driver has its own DMA ring beyond the ALSA buffer
+  (the kernel driver of rpi-gpio-spdif 0.1.0, as before the switch to the plugin):
   internet radio at 44.1 kHz, pause, station change, rate changes, switching to and from
   AC3 passthrough (which Kodi sends to the card directly, on its separate passthrough
   device). Listened to and found in sync.
@@ -216,7 +222,9 @@ machine, a Raspberry Pi 4B with LibreELEC 12.2.1 (alsa-lib 1.2.11) and Kodi 21:
   right time, complete copy, no gaps. The lead against the sound actually leaving HDMI
   was not measured, and a TV adds delay no driver reports.
 
-- Kodi in front of an S/PDIF card: a video with flash and click stayed lip-synchronous by eye.
+- In front of the device `hdmi_bmc` of rpi-gpio-spdif 0.2.0 (the default slave, `extra_ms` 80):
+  radio and video in Kodi, a video with flash and click stayed lip-synchronous by eye, the second
+  room measured 20 to 24 ms early, no dropouts in the copy.
 
 Not tested: USB and `dmix` slaves, Kodi on HDMI, other alsa-lib versions than 1.2.8 (selftest)
 and 1.2.11, runs longer than about two hours.

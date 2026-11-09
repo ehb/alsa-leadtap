@@ -125,7 +125,7 @@ typedef struct
 {
   int fd;
   pthread_t th;
-  volatile int stop;
+  _Atomic int stop;
   int stopped;
   int16_t *s; /* interleaved stereo */
   size_t cap;

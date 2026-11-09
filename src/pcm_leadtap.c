@@ -33,7 +33,8 @@
      dropped, not sent late, so the copy never drifts out of sync.
    - drop / prepare / underrun recovery discard the queued copy, pause holds it. A batch the
      pacer has already taken out of the queue is checked again right before it is written
-     (flush generation, pause, deadline), so it cannot reach a pipe after such a transition.
+     (flush generation, pause, deadline). The lock is not held across the write, so a
+     transition in that short window can still let this one batch (about 10 ms) through.
    - snd_pcm_rewind / snd_pcm_forward: alsa-lib moves only the application pointer for an
      ioplug, audio already given to the slave cannot be taken back. The call is accepted but
      has no effect on the audio; the plugin keeps the pointer consistent (see fix_appl).

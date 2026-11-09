@@ -137,7 +137,8 @@ The script refuses files that are not 64-bit AArch64 ELF. The version comes from
 `CHANGELOG.md` entry unless `--version x.y.z` is given. Install the zip in Kodi (Settings ->
 Add-ons -> Install from zip file; allow unknown sources first). LibreELEC then enables a
 systemd unit that starts before Kodi, writes the ALSA configuration and keeps
-wled-audiosync running (restarted when it dies).
+wled-audiosync running (restarted when it dies). **Restart Kodi once after the first
+installation:** a running Kodi does not see the new audio device.
 
 What you get:
 

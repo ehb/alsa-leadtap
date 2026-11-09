@@ -1,0 +1,15 @@
+[Unit]
+Description=ALSA early-copy plugin and WLED audio sync (alsa-leadtap)
+After=local-fs.target
+Before=kodi.service
+
+[Service]
+Type=simple
+# start writes the ALSA configuration before Kodi is started; run supervises wled-audiosync
+ExecStartPre=/bin/sh /storage/.kodi/addons/service.alsa-leadtap/bin/alsa-leadtap start
+ExecStart=/bin/sh /storage/.kodi/addons/service.alsa-leadtap/bin/alsa-leadtap run
+ExecStopPost=/bin/sh /storage/.kodi/addons/service.alsa-leadtap/bin/alsa-leadtap stop
+Nice=5
+
+[Install]
+WantedBy=kodi.service

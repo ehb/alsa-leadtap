@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<settings version="1">
+  <section id="service.alsa-leadtap">
+    <category id="audio" label="30000" help="">
+      <group id="1" label="30001">
+        <setting id="slave" type="string" label="30010" help="30011">
+          <level>0</level>
+          <default>iec958:CARD=SPDIFout,DEV=0</default>
+          <control type="edit" format="string">
+            <heading>30010</heading>
+          </control>
+        </setting>
+        <setting id="lead" type="integer" label="30012" help="30013">
+          <level>0</level>
+          <default>180</default>
+          <constraints>
+            <minimum>0</minimum>
+            <step>10</step>
+            <maximum>2000</maximum>
+          </constraints>
+          <control type="edit" format="integer">
+            <heading>30012</heading>
+          </control>
+        </setting>
+      </group>
+    </category>
+    <category id="wled" label="30002" help="">
+      <group id="1" label="30003">
+        <setting id="wled" type="boolean" label="30020" help="30021">
+          <level>0</level>
+          <default>true</default>
+          <control type="toggle"/>
+        </setting>
+        <setting id="target" type="string" label="30022" help="30023">
+          <level>0</level>
+          <default>239.0.0.1</default>
+          <dependencies>
+            <dependency type="enable" setting="wled">true</dependency>
+          </dependencies>
+          <control type="edit" format="ip">
+            <heading>30022</heading>
+          </control>
+        </setting>
+        <setting id="gain" type="number" label="30024" help="30025">
+          <level>0</level>
+          <default>1.0</default>
+          <constraints>
+            <minimum>0.1</minimum>
+            <step>0.1</step>
+            <maximum>10</maximum>
+          </constraints>
+          <dependencies>
+            <dependency type="enable" setting="wled">true</dependency>
+          </dependencies>
+          <control type="edit" format="number">
+            <heading>30024</heading>
+          </control>
+        </setting>
+      </group>
+    </category>
+  </section>
+</settings>

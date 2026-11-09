@@ -1,0 +1,66 @@
+# Kodi Media Center language file
+# Addon Name: alsa-leadtap
+# Addon id: service.alsa-leadtap
+msgid ""
+msgstr ""
+"Project-Id-Version: service.alsa-leadtap\n"
+"Language: en_GB\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgctxt "#30000"
+msgid "Audio"
+msgstr ""
+
+msgctxt "#30001"
+msgid "Output device and early copy"
+msgstr ""
+
+msgctxt "#30002"
+msgid "WLED audio sync"
+msgstr ""
+
+msgctxt "#30003"
+msgid "Send the sound to WLED"
+msgstr ""
+
+msgctxt "#30010"
+msgid "Sound card (ALSA device)"
+msgstr ""
+
+msgctxt "#30011"
+msgid "ALSA name of the device that plays the sound, for example iec958:CARD=SPDIFout,DEV=0 (optical S/PDIF of rpi-gpio-spdif) or hdmi:CARD=vc4hdmi0,DEV=0 (HDMI). List the names with: aplay -L. Letters, digits and _ : = , . + - only. After a change the device is rewritten at once; a device that is playing keeps the old setting until it is opened again."
+msgstr ""
+
+msgctxt "#30012"
+msgid "Lead of the copy (ms)"
+msgstr ""
+
+msgctxt "#30013"
+msgid "How long before it is audible the copy is written to the pipes (0 to 2000, default 180). wled-audiosync holds its packets back by the same time. After a change wled-audiosync uses the new value at once, but a device that is playing keeps the old lead until playback starts again, so change it while nothing is playing."
+msgstr ""
+
+msgctxt "#30020"
+msgid "Send audio sync to WLED"
+msgstr ""
+
+msgctxt "#30021"
+msgid "Run the bundled wled-audiosync on the copy (pipe /tmp/leadtap-sync.fifo) and send WLED Audio Sync V2 packets. WLED has to be set to receive audio sync."
+msgstr ""
+
+msgctxt "#30022"
+msgid "Target address"
+msgstr ""
+
+msgctxt "#30023"
+msgid "IPv4 address of the WLED controller, or the multicast group 239.0.0.1 (default)."
+msgstr ""
+
+msgctxt "#30024"
+msgid "Gain"
+msgstr ""
+
+msgctxt "#30025"
+msgid "Scales volume and bands after the automatic gain control (default 1.0)."
+msgstr ""

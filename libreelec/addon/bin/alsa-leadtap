@@ -1,0 +1,221 @@
+#!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Start/run/stop helper of the LibreELEC add-on service.alsa-leadtap.
+#   start: read the add-on settings, write the ALSA configuration (device hdmi_leadtap)
+#          and the environment file for "run"
+#   run:   run wled-audiosync (restarted when it dies) or, if it is switched off, idle;
+#          this is the main process of the unit
+#   stop:  remove everything start wrote (the status file only after a clean stop: a failed
+#          start or run leaves its reason for Kodi, see default.py)
+#   current: print the effective settings (the line start stores as 'applied'); default.py
+#          compares the two to see whether a settings change needs a restart
+# Paths can be overridden for tests (see libreelec/test_addon.sh).
+ID=service.alsa-leadtap
+A=${LEADTAP_ADDON:-/storage/.kodi/addons/$ID}
+SET=${LEADTAP_SETTINGS:-/storage/.kodi/userdata/addon_data/$ID/settings.xml}
+CONFD=${LEADTAP_CONFD:-/var/lib/alsa/conf.d}
+RUN=${LEADTAP_RUN:-/run}
+FIFODIR=${LEADTAP_FIFODIR:-/tmp}
+RESTART_DELAY=${LEADTAP_RESTART_DELAY:-5}
+
+CONF=$CONFD/60-alsa-leadtap.conf
+STATUS=$RUN/$ID.status
+ENVF=$RUN/$ID.env
+APPLIED=$RUN/$ID.applied
+MARK="# written by $ID"
+PLUGIN=$A/lib/libasound_module_pcm_leadtap.so
+WLED_BIN=$A/bin/wled-audiosync
+
+DEF_SLAVE='iec958:CARD=SPDIFout,DEV=0'
+DEF_LEAD=180
+DEF_WLED=true
+DEF_TARGET=239.0.0.1
+DEF_GAIN=1.0
+
+log() { echo "alsa-leadtap: $*"; }
+# fail: log, leave the reason for the Kodi notification (default.py), exit
+fail() { log "$*"; echo "$*" > "$STATUS"; exit 1; }
+
+# setting ID: the text of <setting id="ID">...</setting> in the add-on's settings file,
+# trimmed, with XML entities decoded; empty when the file or the entry is missing
+setting() {
+  [ -r "$SET" ] || return 0
+  sed -n "s|.*<setting id=\"$1\"[^>]*>\([^<]*\)</setting>.*|\1|p" "$SET" | head -n 1 |
+    sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+        -e 's/&quot;/"/g' -e 's/&lt;/</g' -e 's/&gt;/>/g' -e 's/&amp;/\&/g'
+}
+
+# valid_ipv4 STR
+valid_ipv4() {
+  # no leading zeros: inet_pton (wled-audiosync) rejects 010.1.2.3
+  echo "$1" | grep -Eq '^(0|[1-9][0-9]{0,2})(\.(0|[1-9][0-9]{0,2})){3}$' || return 1
+  _oldifs=$IFS; IFS=.
+  set -- $1
+  IFS=$_oldifs
+  for _o in "$@"; do [ "$_o" -le 255 ] || return 1; done
+}
+
+# Validated settings. Anything that is not clearly valid falls back to the default (and says
+# so in the journal): the values end up in a configuration file and on a command line.
+load_settings() {
+  S_SLAVE=$(setting slave)
+  case $S_SLAVE in
+    "") S_SLAVE=$DEF_SLAVE ;;
+    *[!A-Za-z0-9_:=,.+-]*) log "setting slave: unusable characters, using $DEF_SLAVE"; S_SLAVE=$DEF_SLAVE ;;
+  esac
+
+  S_LEAD=$(setting lead)
+  if [ -z "$S_LEAD" ]; then
+    S_LEAD=$DEF_LEAD
+  elif ! echo "$S_LEAD" | grep -Eq '^[0-9]{1,4}$' || [ "$S_LEAD" -gt 2000 ]; then
+    log "setting lead: '$S_LEAD' is not 0..2000, using $DEF_LEAD"; S_LEAD=$DEF_LEAD
+  else
+    S_LEAD=$(expr "$S_LEAD" + 0)
+  fi
+
+  S_WLED=$(setting wled)
+  case $S_WLED in
+    true|false) ;;
+    "") S_WLED=$DEF_WLED ;;
+    *) log "setting wled: '$S_WLED' is not true/false, using $DEF_WLED"; S_WLED=$DEF_WLED ;;
+  esac
+
+  S_TARGET=$(setting target)
+  if [ -z "$S_TARGET" ]; then
+    S_TARGET=$DEF_TARGET
+  elif ! valid_ipv4 "$S_TARGET"; then
+    log "setting target: '$S_TARGET' is not an IPv4 address, using $DEF_TARGET"; S_TARGET=$DEF_TARGET
+  fi
+
+  S_GAIN=$(setting gain)
+  if [ -z "$S_GAIN" ]; then
+    S_GAIN=$DEF_GAIN
+  elif ! echo "$S_GAIN" | grep -Eq '^[0-9]{1,2}(\.[0-9]{1,4})?$' ||
+       echo "$S_GAIN" | grep -Eq '^0+(\.0+)?$'; then
+    log "setting gain: '$S_GAIN' is not a number 0 < g < 100, using $DEF_GAIN"; S_GAIN=$DEF_GAIN
+  fi
+}
+
+# the settings as they take effect (after validation), one line
+effective() { echo "slave=$S_SLAVE lead=$S_LEAD wled=$S_WLED target=$S_TARGET gain=$S_GAIN"; }
+
+start() {
+  rm -f "$STATUS"
+  [ -f "$PLUGIN" ] || fail "plugin missing: $PLUGIN"
+  # a file under our name that we did not write is somebody else's: stop leaves it, so does start
+  if [ -e "$CONF" ] && ! grep -q "^$MARK" "$CONF" 2> /dev/null; then
+    fail "refusing to overwrite $CONF: it was not written by this add-on"
+  fi
+  load_settings
+  APPLIED_LINE=$(effective)
+
+  # wled-audiosync switched on but not runnable: the sound still works, WLED sync is off and
+  # the status file says why (the unit would otherwise look healthy)
+  NOTE=
+  if [ "$S_WLED" = true ]; then
+    [ -x "$WLED_BIN" ] || chmod +x "$WLED_BIN" 2> /dev/null
+    if [ ! -x "$WLED_BIN" ]; then
+      NOTE="wled-audiosync is missing or not executable ($WLED_BIN); WLED sync is off"
+      S_WLED=false
+    fi
+  fi
+
+  FIFOS="\"$FIFODIR/leadtap.fifo\""
+  [ "$S_WLED" = true ] && FIFOS="$FIFOS \"$FIFODIR/leadtap-sync.fifo\""
+
+  # /var is a tmpfs on LibreELEC, the directory does not exist before someone makes it
+  mkdir -p "$CONFD" || fail "cannot create $CONFD"
+  # tmp name without the .conf suffix: alsa-lib only reads *.conf from the directory
+  {
+    echo "$MARK"
+    echo "pcm_type.leadtap {"
+    echo "  lib \"$PLUGIN\""
+    echo "}"
+    echo
+    echo "# The name has to begin with hdmi: Kodi offers passthrough only on iec958/spdif/hdmi"
+    echo "# names. Kodi appends AES arguments to such names; the plugin does not take them, so"
+    echo "# Kodi opens the bare name (and the channel status stays PCM)."
+    echo "pcm.hdmi_leadtap {"
+    echo "  type leadtap"
+    echo "  slave.pcm \"$S_SLAVE\""
+    echo "  lead $S_LEAD"
+    echo "  fifo [ $FIFOS ]"
+    echo "  hint {"
+    echo "    show on"
+    echo "    description \"Audio with early copy (leadtap)\""
+    echo "  }"
+    echo "}"
+  } > "$CONF.tmp" && mv "$CONF.tmp" "$CONF" || fail "cannot write $CONF"
+
+  {
+    echo "WLED_ON=$S_WLED"
+    echo "TARGET=$S_TARGET"
+    echo "GAIN=$S_GAIN"
+    echo "LEAD=$S_LEAD"
+    echo "SYNCFIFO=$FIFODIR/leadtap-sync.fifo"
+  } > "$ENVF" || fail "cannot write $ENVF"
+
+  echo "$APPLIED_LINE" > "$APPLIED" || fail "cannot write $APPLIED"
+  log "device hdmi_leadtap -> $S_SLAVE, lead $S_LEAD ms, wled-audiosync $S_WLED"
+  if [ -n "$NOTE" ]; then
+    log "$NOTE"
+    echo "$NOTE" > "$STATUS"
+  fi
+}
+
+CHILD=
+run() {
+  [ -r "$ENVF" ] || fail "no $ENVF: start has not run"
+  . "$ENVF"
+  trap 'test -n "$CHILD" && kill "$CHILD" 2> /dev/null; exit 0' TERM INT HUP
+  if [ "$WLED_ON" = true ]; then
+    while :; do
+      "$WLED_BIN" --pipe "$SYNCFIFO" --lead-ms "$LEAD" --target "$TARGET" --gain "$GAIN" &
+      CHILD=$!
+      wait "$CHILD"
+      rc=$?
+      CHILD=
+      case $rc in
+        2 | 126 | 127)
+          # arguments rejected / not executable / not found: retrying changes nothing; say so
+          # where Kodi shows it, and keep the unit up for the ALSA configuration
+          log "wled-audiosync cannot run (exit $rc), not restarting"
+          echo "wled-audiosync cannot run (exit $rc: arguments rejected or program not executable); WLED sync is off" > "$STATUS"
+          break
+          ;;
+      esac
+      log "wled-audiosync exited with $rc, restarting in ${RESTART_DELAY}s"
+      sleep "$RESTART_DELAY" &
+      CHILD=$!
+      wait "$CHILD"
+      CHILD=
+    done
+  fi
+  # nothing to supervise (switched off or given up): stay up, the unit stands for the
+  # ALSA configuration
+  while :; do
+    sleep 3600 &
+    CHILD=$!
+    wait "$CHILD"
+    CHILD=
+  done
+}
+
+stop() {
+  # ExecStopPost also runs after a failed start; systemd then passes SERVICE_RESULT other than
+  # "success", and the reason in the status file has to survive for Kodi. The next start (or
+  # a clean stop) removes it.
+  [ "${SERVICE_RESULT:-success}" = success ] && rm -f "$STATUS"
+  rm -f "$ENVF" "$APPLIED" "$CONF.tmp"
+  grep -q "^$MARK" "$CONF" 2> /dev/null && rm -f "$CONF"
+  rmdir "$CONFD" 2> /dev/null
+  return 0
+}
+
+case "$1" in
+  start) start ;;
+  run) run ;;
+  stop) stop ;;
+  current) load_settings > /dev/null; effective ;;
+  *) echo "usage: $0 start|run|stop|current"; exit 2 ;;
+esac

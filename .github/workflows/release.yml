@@ -1,0 +1,79 @@
+name: release
+
+# A tag vX.Y.Z runs the selftest, builds the plugin for aarch64 and armhf, builds the
+# LibreELEC add-on zip and attaches all of it to the GitHub Release of that tag.
+#
+# The add-on contains the aarch64 wled-audiosync binary. It is built here from the source of
+# the public wled-audiosync tag named in ci/wled-audiosync.ref; that tag is also the
+# corresponding source of the GPL binary inside the zip. wled-audiosync must therefore be
+# tagged (and published) BEFORE alsa-leadtap, or this job cannot check it out.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    container: debian:12@sha256:268fb24c39bca92d326dd83ea3abebe4a3f7751c804ffef23bb6d857dd343ff8
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: sh ci/install_deps.sh
+      - run: sh ci/selftest.sh
+      - name: Build and pack
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          sh ci/release_notes.sh "${TAG#v}" > /dev/null
+          for arch in aarch64 armhf; do
+            sh ci/build.sh "$arch"
+            sh ci/package.sh "$arch" "${TAG#v}" dist
+          done
+      - name: Read the pinned wled-audiosync tag
+        id: audiosync
+        run: echo "ref=$(tr -d ' \r\n' < ci/wled-audiosync.ref)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ehb/wled-audiosync
+          ref: ${{ steps.audiosync.outputs.ref }}
+          path: wled-audiosync
+      - name: Build wled-audiosync (static, aarch64) and the add-on zip
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          make -C wled-audiosync CC=aarch64-linux-gnu-gcc BUILD=build/aarch64 CFLAGS="-O2 -Wall -Wextra -Werror -static"
+          aarch64-linux-gnu-strip wled-audiosync/build/aarch64/wled-audiosync
+          python3 libreelec/build_addon.py --so build/aarch64/libasound_module_pcm_leadtap.so \
+              --audiosync wled-audiosync/build/aarch64/wled-audiosync \
+              --audiosync-license wled-audiosync/LICENSE --version "${TAG#v}" --out dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: plugin
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: plugin
+          path: dist
+      - name: Create the release and attach the archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          sh ci/release_notes.sh "${TAG#v}" > notes.md
+          gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes-file notes.md --verify-tag
+          gh release upload "$TAG" dist/*.tar.gz dist/*.zip --clobber

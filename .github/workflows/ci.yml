@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions: {}
+
+jobs:
+  build:
+    name: build (native, aarch64, armhf)
+    runs-on: ubuntu-24.04
+    container: debian:12@sha256:268fb24c39bca92d326dd83ea3abebe4a3f7751c804ffef23bb6d857dd343ff8
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: sh ci/install_deps.sh
+      - run: sh ci/build.sh native
+      - run: sh ci/build.sh aarch64
+      - run: sh ci/build.sh armhf
+
+  selftest:
+    # Real-time test on a shared runner: see ci/selftest.sh for what is retried and what is not.
+    runs-on: ubuntu-24.04
+    container: debian:12@sha256:268fb24c39bca92d326dd83ea3abebe4a3f7751c804ffef23bb6d857dd343ff8
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: sh ci/install_deps.sh
+      - run: sh ci/selftest.sh

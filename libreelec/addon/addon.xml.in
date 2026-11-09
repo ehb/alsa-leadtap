@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="service.alsa-leadtap"
+       name="alsa-leadtap (early audio copy, WLED audio sync)"
+       version="@VERSION@"
+       provider-name="ehb">
+  <requires>
+    <import addon="xbmc.python" version="3.0.1"/>
+  </requires>
+  <extension point="xbmc.service" library="default.py"/>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">ALSA plugin with an early copy of the audio for multiroom (Snapcast) and WLED audio sync</summary>
+    <description lang="en_GB">Provides the audio output device "hdmi_leadtap" (shown in Kodi as "Audio with early copy (leadtap)"): the audio goes to the sound card you choose unchanged, and a copy is written to named pipes a fixed time before it is audible. A Snapcast server reads /tmp/leadtap.fifo for other rooms; the bundled wled-audiosync turns the copy into WLED Audio Sync packets so that sound-reactive effects follow what you hear.[CR][CR]aarch64 (64-bit Raspberry Pi) only. The Snapcast server is not included; LibreELEC has its own add-on. Components: alsa-leadtap (LGPL-2.1-or-later) and wled-audiosync (GPL-3.0-or-later).</description>
+    <platform>linux</platform>
+    <license>LGPL-2.1-or-later AND GPL-3.0-or-later</license>
+    <source>https://github.com/ehb/alsa-leadtap</source>
+  </extension>
+</addon>

@@ -959,6 +959,62 @@ out:
   alarm(0);
 }
 
+/*
+  Rates: the plugin must offer exactly what the slave can do. A slave with fixed rates (the fake
+  slave by default: 32000, 44100, 48000) must not be reported as a continuous range -- an application
+  asking for the nearest rate (Kodi: a game core at 32040 Hz) would get a rate the slave then
+  refuses. A slave with a continuous range keeps offering any rate in it.
+*/
+static int rate_ok(snd_pcm_t *p, unsigned rate)
+{
+  snd_pcm_hw_params_t *hw;
+  snd_pcm_hw_params_alloca(&hw);
+  return snd_pcm_hw_params_any(p, hw) >= 0 && snd_pcm_hw_params_test_rate(p, hw, rate, 0) == 0;
+}
+
+static void run_rates(void)
+{
+  snd_pcm_t *p;
+  snd_pcm_hw_params_t *hw;
+  unsigned near;
+  int dir = 0;
+
+  begin("rates");
+  snd_pcm_hw_params_alloca(&hw);
+  if (snd_pcm_open(&p, "lt", SND_PCM_STREAM_PLAYBACK, 0) < 0)
+  {
+    check(0, "rates: open leadtap PCM (fixed-rate slave)");
+    return;
+  }
+  check(rate_ok(p, 32000) && rate_ok(p, 44100) && rate_ok(p, 48000), "rates: fixed-rate slave: 32000, 44100 and 48000 are offered");
+  check(!rate_ok(p, 46000) && !rate_ok(p, 32040), "rates: fixed-rate slave: 46000 and 32040 are not offered");
+  near = 32040;
+  snd_pcm_uframes_t period = 1024, buffer = 8192; /* set explicitly, as Kodi does */
+  int e = snd_pcm_hw_params_any(p, hw) < 0 || snd_pcm_hw_params_set_access(p, hw, SND_PCM_ACCESS_RW_INTERLEAVED) < 0 ||
+          snd_pcm_hw_params_set_format(p, hw, SND_PCM_FORMAT_S16_LE) < 0 || snd_pcm_hw_params_set_channels(p, hw, 2) < 0 ||
+          snd_pcm_hw_params_set_rate_near(p, hw, &near, &dir) < 0 ||
+          snd_pcm_hw_params_set_period_size_near(p, hw, &period, &dir) < 0 || snd_pcm_hw_params_set_buffer_size_near(p, hw, &buffer) < 0;
+  check(!e && near == 32000, "rates: nearest to 32040 is a slave rate (%u)", near);
+  check(!e && snd_pcm_hw_params(p, hw) == 0, "rates: hw_params with the nearest rate succeeds");
+  snd_pcm_close(p);
+
+  setenv("FAKE_RATE_RANGE", "8000:192000", 1);
+  if (snd_pcm_open(&p, "lt", SND_PCM_STREAM_PLAYBACK, 0) < 0)
+    check(0, "rates: open leadtap PCM (continuous slave)");
+  else
+  {
+    check(rate_ok(p, 32040) && rate_ok(p, 46000) && rate_ok(p, 8000) && rate_ok(p, 192000),
+          "rates: continuous slave: 32040, 46000 and the range ends are offered");
+    check(!rate_ok(p, 7999) && !rate_ok(p, 192001), "rates: continuous slave: nothing outside its range");
+    snd_pcm_close(p);
+    snd_pcm_t *q = open_pcm(32040);
+    check(q != NULL, "rates: continuous slave: hw_params at 32040 succeeds");
+    if (q)
+      snd_pcm_close(q);
+  }
+  unsetenv("FAKE_RATE_RANGE");
+}
+
 static int make_fifo(const char *path)
 {
   if (mkfifo(path, 0600) != 0)
@@ -1058,6 +1114,7 @@ int main(int argc, char **argv)
   run_small_buffer();
   run_refuse();
   run_rewind_forward();
+  run_rates();
 
   unlink(fifo_path);
   unlink(fifo2_path);

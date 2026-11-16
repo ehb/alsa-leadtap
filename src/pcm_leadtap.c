@@ -1017,11 +1017,38 @@ static int set_constraints(leadtap_t *lt)
     return -EINVAL;
   }
 
+  /*
+    Rates: a slave with fixed rates (a sound card) must not be offered as a continuous range.
+    An application asking for the nearest rate (e.g. a game core at 32040 Hz) would get a rate
+    inside the range that the slave then refuses, and fall back to another device. Probe the
+    standard rates and a few odd ones: if the slave takes an odd rate it is continuous and the
+    range stays; otherwise offer exactly the standard rates it takes. If it takes none of the
+    standard rates, keep the range (nothing better is known).
+  */
+  static const unsigned std_rates[] = {5512,  8000,  11025, 16000,  22050,  32000,  44100,  48000, 64000,
+                                       88200, 96000, 128000, 176400, 192000, 352800, 384000, 705600, 768000};
+  static const unsigned odd_rates[] = {32040, 44101, 47999, 96001};
+  unsigned rates[sizeof(std_rates) / sizeof(std_rates[0])], nr = 0;
+  int continuous = 0;
+  for (unsigned i = 0; i < sizeof(odd_rates) / sizeof(odd_rates[0]) && !continuous; i++)
+  {
+    snd_pcm_hw_params_copy(hw, any);
+    if (odd_rates[i] > rmin && odd_rates[i] < rmax && snd_pcm_hw_params_set_rate(lt->slave, hw, odd_rates[i], 0) >= 0)
+      continuous = 1;
+  }
+  for (unsigned i = 0; i < sizeof(std_rates) / sizeof(std_rates[0]) && !continuous; i++)
+  {
+    snd_pcm_hw_params_copy(hw, any);
+    if (std_rates[i] >= rmin && std_rates[i] <= rmax && snd_pcm_hw_params_set_rate(lt->slave, hw, std_rates[i], 0) >= 0)
+      rates[nr++] = std_rates[i];
+  }
+
   static const unsigned access[] = {SND_PCM_ACCESS_RW_INTERLEAVED};
   if ((err = snd_pcm_ioplug_set_param_list(&lt->io, SND_PCM_IOPLUG_HW_ACCESS, 1, access)) < 0 ||
       (err = snd_pcm_ioplug_set_param_list(&lt->io, SND_PCM_IOPLUG_HW_FORMAT, nf, formats)) < 0 ||
       (err = snd_pcm_ioplug_set_param_minmax(&lt->io, SND_PCM_IOPLUG_HW_CHANNELS, cmin, cmax)) < 0 ||
-      (err = snd_pcm_ioplug_set_param_minmax(&lt->io, SND_PCM_IOPLUG_HW_RATE, rmin, rmax)) < 0 ||
+      (err = (continuous || !nr ? snd_pcm_ioplug_set_param_minmax(&lt->io, SND_PCM_IOPLUG_HW_RATE, rmin, rmax)
+                                : snd_pcm_ioplug_set_param_list(&lt->io, SND_PCM_IOPLUG_HW_RATE, nr, rates))) < 0 ||
       (err = snd_pcm_ioplug_set_param_minmax(&lt->io, SND_PCM_IOPLUG_HW_PERIOD_BYTES, (unsigned)pbmin, (unsigned)pbmax)) < 0 ||
       (err = snd_pcm_ioplug_set_param_minmax(&lt->io, SND_PCM_IOPLUG_HW_PERIODS, 2, 1024)) < 0 ||
       (err = snd_pcm_ioplug_set_param_minmax(&lt->io, SND_PCM_IOPLUG_HW_BUFFER_BYTES, (unsigned)bbmin, (unsigned)bbmax)) < 0)

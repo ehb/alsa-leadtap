@@ -192,7 +192,7 @@ SND_PCM_PLUGIN_DEFINE_FUNC(fakeslave)
 {
   static const unsigned access[] = {SND_PCM_ACCESS_RW_INTERLEAVED};
   static const unsigned formats[] = {SND_PCM_FORMAT_S16_LE, SND_PCM_FORMAT_S32_LE, SND_PCM_FORMAT_FLOAT_LE};
-  static const unsigned rates[] = {44100, 48000};
+  static const unsigned rates[] = {32000, 44100, 48000};
   int err;
   (void)root;
   (void)conf;
@@ -210,6 +210,10 @@ SND_PCM_PLUGIN_DEFINE_FUNC(fakeslave)
     sscanf(env, "%ld:%ld", &f->derr_from, &f->derr_to);
   f->open_ns = now_ns();
   unsigned max_buffer_bytes = (env = getenv("FAKE_MAX_BUFFER_BYTES")) ? (unsigned)atol(env) : 1u << 21;
+  /* default: fixed rates 32000/44100/48000 like a sound card; FAKE_RATE_RANGE=lo:hi = any rate in the range */
+  unsigned rate_lo = 0, rate_hi = 0;
+  if ((env = getenv("FAKE_RATE_RANGE")))
+    sscanf(env, "%u:%u", &rate_lo, &rate_hi);
   f->tfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
   if (f->tfd < 0)
   {
@@ -235,7 +239,8 @@ SND_PCM_PLUGIN_DEFINE_FUNC(fakeslave)
   if ((err = snd_pcm_ioplug_set_param_list(&f->io, SND_PCM_IOPLUG_HW_ACCESS, 1, access)) < 0 ||
       (err = snd_pcm_ioplug_set_param_list(&f->io, SND_PCM_IOPLUG_HW_FORMAT, 3, formats)) < 0 ||
       (err = snd_pcm_ioplug_set_param_minmax(&f->io, SND_PCM_IOPLUG_HW_CHANNELS, 1, 8)) < 0 ||
-      (err = snd_pcm_ioplug_set_param_list(&f->io, SND_PCM_IOPLUG_HW_RATE, 2, rates)) < 0 ||
+      (err = (rate_lo ? snd_pcm_ioplug_set_param_minmax(&f->io, SND_PCM_IOPLUG_HW_RATE, rate_lo, rate_hi)
+                      : snd_pcm_ioplug_set_param_list(&f->io, SND_PCM_IOPLUG_HW_RATE, 3, rates))) < 0 ||
       (err = snd_pcm_ioplug_set_param_minmax(&f->io, SND_PCM_IOPLUG_HW_PERIOD_BYTES, 256, 1 << 18)) < 0 ||
       (err = snd_pcm_ioplug_set_param_minmax(&f->io, SND_PCM_IOPLUG_HW_PERIODS, 2, 1024)) < 0 ||
       (err = snd_pcm_ioplug_set_param_minmax(&f->io, SND_PCM_IOPLUG_HW_BUFFER_BYTES, 512, max_buffer_bytes)) < 0)
